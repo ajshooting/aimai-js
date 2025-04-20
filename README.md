@@ -1,0 +1,1 @@
+# aimai-js
