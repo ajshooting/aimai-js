@@ -11,3 +11,33 @@
 
 #!.yarn/cache
 .pnp.*
+
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+*.js.map
+*.d.ts.map
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test results (if any)
+coverage/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
