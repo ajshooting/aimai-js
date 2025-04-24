@@ -1,5 +1,9 @@
 {
   "name": "aimai-js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
   "packageManager": "yarn@4.6.0",
   "devDependencies": {
     "@types/hepburn": "^1.2.2",
