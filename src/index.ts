@@ -1,145 +1,180 @@
-import { AimaiOptions, SearchResult, NormalizationOptions } from './types';
+import { SearchResult, NormalizationOptions, IndexedItem } from './types'; // Import IndexedItem
 import { normalize } from './japanese/normalizer';
 import { similarity } from './core/fuzzy';
 import { getReading } from './japanese/tokenizer';
 import { romajiToHiragana } from './utils';
-import { Tokenizer, IpadicFeatures } from 'kuromoji'; // Import kuromoji types
+import { Tokenizer, IpadicFeatures } from 'kuromoji';
 
-// Define a type for processed keys
-type ProcessedKey<T> = { name: keyof T; weight: number };
+// --- Adjust AimaiOptions --- Remove keys
+export interface AimaiOptions<T = any> {
+    threshold?: number;
+    limit?: number;
+    includeScore?: boolean;
+    includeMatches?: boolean;
+    useKanaNormalization?: boolean; // Still needed for query normalization
+    normalizationOptions?: NormalizationOptions; // Still needed for query normalization
+    useRomajiSearch?: boolean; // Still needed for query processing
+    tokenizer?: Tokenizer<IpadicFeatures>; // Keep if query reading is needed at search time
+}
 
-export default class Aimai<T = string> {
-    private list: T[];
-    private opts: Required<Omit<AimaiOptions<T>, 'keys' | 'tokenizer' | 'normalizationOptions'>> & {
+export default class Aimai<T = any> { // Use any for T if original type isn't strictly needed after indexing
+    private indexedList: IndexedItem<T>[];
+    // Adjust opts type to reflect removed keys
+    private opts: Required<Omit<AimaiOptions<T>, 'tokenizer' | 'normalizationOptions' | 'includeMatches'>> & {
         normalizationOptions: Required<NormalizationOptions>;
-        tokenizer?: Tokenizer<IpadicFeatures>; // Use specific Kuromoji type
-        keys: ProcessedKey<T>[]; // Use processed keys type
+        tokenizer?: Tokenizer<IpadicFeatures>; // Keep tokenizer instance if needed for query reading
+        includeMatches: boolean; // Keep includeMatches separate as it's not Required
     };
-    private normalizedList: { text: string; reading: Promise<string> }[];
 
-    constructor(list: T[], options?: AimaiOptions<T>) {
-        this.list = list;
+    // Constructor now accepts pre-indexed data
+    constructor(indexedList: IndexedItem<T>[], options?: AimaiOptions<T>) {
+        if (!Array.isArray(indexedList) || (indexedList.length > 0 && (!indexedList[0].hasOwnProperty('original') || !indexedList[0].hasOwnProperty('normalized') || !indexedList[0].hasOwnProperty('reading')))) {
+            console.warn('Aimai constructor received potentially invalid indexed data. Expected IndexedItem<T>[]. Initializing with empty list.');
+            this.indexedList = []; // Initialize as empty to avoid errors
+        } else {
+            this.indexedList = indexedList;
+        }
 
-        // --- Process Options ---
-        const defaultOptions: Required<Omit<AimaiOptions<any>, 'keys' | 'tokenizer' | 'normalizationOptions'>> & { normalizationOptions: Required<NormalizationOptions> } = {
+        // --- Process Options (Simplified, removed keys) ---
+        // Adjust defaultOptions type
+        const defaultOptions: Required<Omit<AimaiOptions<any>, 'tokenizer' | 'normalizationOptions' | 'includeMatches'>> & { normalizationOptions: Required<NormalizationOptions>; includeMatches: boolean } = {
             threshold: 0.6,
-            limit: Infinity, // Default to no limit
+            limit: Infinity,
             includeScore: true,
-            includeMatches: false,
-            useKanaNormalization: true,
-            useRomajiSearch: true,
-            normalizationOptions: { // Default normalization options
+            includeMatches: false, // Default for includeMatches
+            useKanaNormalization: true, // For query
+            useRomajiSearch: true,      // For query
+            normalizationOptions: {
                 normalizeLongVowel: true,
                 expandIterationMark: true,
             },
         };
 
-        const mergedOptions = { ...defaultOptions, ...options };
+        const mergedOptions = { ...defaultOptions, ...options }; // Merge provided options
 
-        // Process keys: Ensure keys are in { name: string, weight: number } format
-        let processedKeys: ProcessedKey<T>[] = [];
-        if (mergedOptions.keys) {
-            processedKeys = (mergedOptions.keys as any[]).map(key => {
-                if (typeof key === 'string') {
-                    return { name: key as keyof T, weight: 1 };
-                }
-                return key as ProcessedKey<T>;
-            });
-        }
-
+        // Assign to this.opts, ensuring type compatibility
         this.opts = {
-            ...mergedOptions,
-            keys: processedKeys,
-            tokenizer: options?.tokenizer, // Store the custom tokenizer if provided
-            normalizationOptions: { // Ensure normalizationOptions is fully populated
+            threshold: mergedOptions.threshold,
+            limit: mergedOptions.limit,
+            includeScore: mergedOptions.includeScore,
+            includeMatches: mergedOptions.includeMatches,
+            useKanaNormalization: mergedOptions.useKanaNormalization,
+            useRomajiSearch: mergedOptions.useRomajiSearch,
+            tokenizer: options?.tokenizer, // Store tokenizer if provided
+            normalizationOptions: {
                 ...defaultOptions.normalizationOptions,
-                ...options?.normalizationOptions,
+                ...(options?.normalizationOptions || {}), // Merge normalization options safely
             },
         };
-
-        // --- Preprocess List ---
-        this.normalizedList = list.map(item => {
-            const rawText = this.extractText(item);
-            const readingPromise = getReading(rawText, this.opts.tokenizer); // Pass tokenizer
-            const normalizedText = this.normalizeText(rawText);
-            return { text: normalizedText, reading: readingPromise };
-        });
     }
 
-    // Helper to extract text based on keys or direct string
-    private extractText(item: T): string {
-        if (typeof item === 'string') {
-            return item;
-        }
-        if (this.opts.keys.length > 0) {
-            return this.opts.keys
-                .map(key => (item as any)[key.name])
-                .filter(v => typeof v === 'string')
-                .join(' '); // Join values from different keys with a space
-        }
-        return String(item); // Fallback to string conversion
-    }
-
-    // Helper to normalize text based on options
-    private normalizeText(text: string): string {
+    // Helper to normalize the *query* text based on options
+    private normalizeQuery(text: string): string {
         let s = text;
-        // Romaji to Hiragana conversion happens *before* normalization
         if (this.opts.useRomajiSearch) {
             s = romajiToHiragana(s);
         }
-        // Kana and other normalization
         if (this.opts.useKanaNormalization) {
-            s = normalize(s, this.opts.normalizationOptions); // Pass normalization options
+            s = normalize(s, this.opts.normalizationOptions);
         } else {
-            s = s.toLowerCase(); // Basic lowercase if normalization is off
+            s = s.toLowerCase();
         }
         return s;
     }
 
+    // Search method now uses pre-indexed data
     async search(query: string): Promise<SearchResult<T>[]> {
-        const normalizedQuery = this.normalizeText(query);
-        const readingQueryPromise = getReading(query, this.opts.tokenizer); // Pass tokenizer
+        const normalizedQuery = this.normalizeQuery(query);
+        // Get query reading only if needed (e.g., if comparing against precomputed readings)
+        // This still requires the tokenizer at search time if used.
+        const readingQuery = await getReading(query, this.opts.tokenizer);
+        const normalizedReadingQuery = normalize(readingQuery, this.opts.normalizationOptions); // Normalize query reading
 
         const results: SearchResult<T>[] = [];
-        const readingQuery = await readingQueryPromise; // Get query reading once
 
-        for (let i = 0; i < this.list.length; i++) {
-            const targetData = this.normalizedList[i];
-            const readingTarget = await targetData.reading; // Await precomputed reading
+        for (let i = 0; i < this.indexedList.length; i++) {
+            const targetData = this.indexedList[i];
 
-            // Calculate similarity scores
-            const scoreText = similarity(normalizedQuery, targetData.text);
-            const scoreReading = similarity(readingQuery, normalize(readingTarget, this.opts.normalizationOptions)); // Normalize reading based on options
+            // Calculate similarity scores using pre-calculated data
+            // Compare normalized query with normalized text (Levenshtein based)
+            const scoreTextLevenshtein = similarity(normalizedQuery, targetData.normalized);
+            // Compare normalized query reading with pre-calculated normalized reading (Levenshtein based)
+            const scoreReadingLevenshtein = similarity(normalizedReadingQuery, targetData.reading);
 
-            // Combine scores (simple max for now, could be weighted later)
+            // Check for substring inclusion
+            const includesText = targetData.normalized.includes(normalizedQuery);
+            const includesReading = targetData.reading.includes(normalizedReadingQuery);
+
+            // Assign higher score if substring is found (adjust score as needed)
+            // Use a score slightly below 1 for substring match to differentiate from perfect Levenshtein match
+            const substringScore = 0.85;
+            const scoreText = includesText ? Math.max(scoreTextLevenshtein, substringScore) : scoreTextLevenshtein;
+            const scoreReading = includesReading ? Math.max(scoreReadingLevenshtein, substringScore) : scoreReadingLevenshtein;
+
+            // Combine scores (simple max for now)
             const score = Math.max(scoreText, scoreReading);
 
             if (score >= this.opts.threshold) {
                 const result: SearchResult<T> = {
-                    item: this.list[i],
-                    refIndex: i,
-                    score: this.opts.includeScore ? score : 0, // Include score conditionally
+                    item: targetData.original, // Return the original item
+                    refIndex: i, // Keep original index relative to the input indexedList
+                    score: this.opts.includeScore ? score : 0,
                 };
-                // Add matches if requested (placeholder for F3.1)
+                // Add matches if requested (placeholder)
                 // if (this.opts.includeMatches) {
-                //     result.matches = calculateMatches(normalizedQuery, targetData.text, readingQuery, readingTarget);
+                //     result.matches = calculateMatches(normalizedQuery, targetData.normalized, normalizedReadingQuery, targetData.reading);
                 // }
                 results.push(result);
             }
         }
 
         // Sort results:
-        // 1. Prioritize items that exactly match the original query string.
+        // 1. Prioritize items whose *original* representation exactly matches the *original* query.
         // 2. Then sort by descending score.
         // 3. Finally, sort by original index for stability.
         results.sort((a, b) => {
-            const aIsOriginalExact = String(this.list[a.refIndex]) === query;
-            const bIsOriginalExact = String(this.list[b.refIndex]) === query;
+            // Need a way to compare original item to original query.
+            // This requires the original item structure to be predictable or stringifiable.
+            // Using String() for a basic comparison. Adjust if needed.
+            // Handle potential objects in original item
+            const getComparableString = (item: T): string => {
+                if (typeof item === 'string') return item;
+                // Attempt a stable string representation for objects, might need refinement
+                try {
+                    // Sort keys for consistent stringification
+                    const sortedItem = Object.keys(item as object).sort().reduce((obj, key) => {
+                        (obj as any)[key] = (item as any)[key];
+                        return obj;
+                    }, {});
+                    return JSON.stringify(sortedItem);
+                } catch {
+                    return String(item);
+                }
+            };
+            const aOriginalString = getComparableString(a.item);
+            const bOriginalString = getComparableString(b.item);
 
-            if (aIsOriginalExact && !bIsOriginalExact) return -1; // a (exact) comes first
-            if (!aIsOriginalExact && bIsOriginalExact) return 1;  // b (exact) comes first
+            const aIsOriginalExact = aOriginalString === query;
+            const bIsOriginalExact = bOriginalString === query;
 
-            // If both are exact or both are not, sort by score then index
+            if (aIsOriginalExact && !bIsOriginalExact) return -1;
+            if (!aIsOriginalExact && bIsOriginalExact) return 1;
+
+            // If scores are equal, prioritize substring matches over pure Levenshtein matches
+            if (b.score === a.score) {
+                const aTargetData = this.indexedList[a.refIndex];
+                const bTargetData = this.indexedList[b.refIndex];
+                const aIncludesText = aTargetData.normalized.includes(normalizedQuery);
+                const aIncludesReading = aTargetData.reading.includes(normalizedReadingQuery);
+                const bIncludesText = bTargetData.normalized.includes(normalizedQuery);
+                const bIncludesReading = bTargetData.reading.includes(normalizedReadingQuery);
+                const aIsSubstringMatch = aIncludesText || aIncludesReading;
+                const bIsSubstringMatch = bIncludesText || bIncludesReading;
+
+                if (aIsSubstringMatch && !bIsSubstringMatch) return -1;
+                if (!aIsSubstringMatch && bIsSubstringMatch) return 1;
+            }
+
             return b.score - a.score || a.refIndex - b.refIndex;
         });
 
@@ -148,9 +183,9 @@ export default class Aimai<T = string> {
             results.splice(this.opts.limit);
         }
 
-        // Remove score if not requested (do this after sorting and limiting)
+        // Remove score if not requested
         if (!this.opts.includeScore) {
-            results.forEach(r => delete (r as any).score); // Use delete or map to new objects
+            results.forEach(r => delete (r as any).score);
         }
 
         return results;

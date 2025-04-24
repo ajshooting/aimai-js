@@ -24,3 +24,10 @@ export interface SearchResult<T> {
     refIndex: number;
     matches?: any; // placeholder for future match info (F1.3, F3.1)
 }
+
+// Add type for pre-processed index item
+export interface IndexedItem<T> {
+    original: T;
+    normalized: string; // Pre-normalized text
+    reading: string;    // Pre-calculated and normalized reading
+}
