@@ -1,9 +1,6 @@
-import { getReading } from '../../src/japanese/tokenizer'; // Adjust path
+import { getReading } from '../../src/japanese/tokenizer';
 
 describe('Japanese Tokenizer (Kuromoji Wrapper)', () => {
-    // Note: These tests depend on Kuromoji.js and its dictionary.
-    // The first test might take longer due to dictionary loading.
-
     it('should get hiragana reading for Kanji text', async () => {
         const reading = await getReading('東京');
         expect(reading).toBe('とうきょう');

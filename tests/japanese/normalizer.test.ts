@@ -19,8 +19,8 @@ describe('Japanese Normalizer', () => {
     });
 
     it('should normalize long vowels by default', () => {
-        expect(normalize('サーバー')).toBe('さば'); // 修正: 長音符削除
-        expect(normalize('コンピューター')).toBe('こんぴゅた'); // 修正: 長音符削除
+        expect(normalize('サーバー')).toBe('さーば');
+        expect(normalize('コンピューター')).toBe('こんぴゅーた');
     });
 
     it('should optionally disable long vowel normalization', () => {
@@ -28,12 +28,12 @@ describe('Japanese Normalizer', () => {
     });
 
     it('should expand iteration marks by default', () => {
-        expect(normalize('人々')).toBe('人人'); // 修正: 表記の繰り返し
-        expect(normalize('様々')).toBe('様様'); // 修正: 表記の繰り返し
+        expect(normalize('人々')).toBe('人人');
+        expect(normalize('様々')).toBe('様様');
     });
 
     it('should optionally disable iteration mark expansion', () => {
-        expect(normalize('人々', { expandIterationMark: false })).toBe('人々'); // 修正: 展開しない
+        expect(normalize('人々', { expandIterationMark: false })).toBe('人々');
     });
 
     // Add more tests for edge cases and other options

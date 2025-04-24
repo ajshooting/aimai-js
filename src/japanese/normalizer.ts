@@ -18,13 +18,12 @@ export function normalize(text: string, options?: NormalizationOptions): string 
     // 3. Convert Katakana to Hiragana (半角カナはNFKCで全角になっているはず)
     s = s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
 
-    // 4. Optional: Normalize long vowels (ー) - ひらがな化後に実行
+    // 4. Optional: Normalize long vowels (ー)
     if (opts.normalizeLongVowel) {
-        // 長音符を削除する方針に変更
-        s = s.replace(/ー/g, '');
+        s = s.replace(/ー$/g, '');
     }
 
-    // 5. Optional: Expand iteration marks (々) - ひらがな化後に実行
+    // 5. Optional: Expand iteration marks (々)
     if (opts.expandIterationMark) {
         // 簡易的に前の文字を繰り返す (例: 人々 -> 人人)
         s = s.replace(/(.)々/g, '$1$1');
