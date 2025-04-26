@@ -32,4 +32,4 @@ console.log(results);
 
 ## ライセンス
 
-MIT
+Apache License 2.0
