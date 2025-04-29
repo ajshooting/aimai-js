@@ -1,23 +1,23 @@
-import { SearchResult, NormalizationOptions, IndexedItem } from './types'; // Import IndexedItem
+import { SearchResult, NormalizationOptions, IndexedItem } from './types';
 import { normalize } from './japanese/normalizer';
 import { similarity } from './core/fuzzy';
 import { getReading } from './japanese/tokenizer';
 import { romajiToHiragana } from './utils';
 import { Tokenizer, IpadicFeatures } from 'kuromoji';
 
-// --- Adjust AimaiOptions --- Remove keys
+// --- Adjust AimaiOptions ---
 export interface AimaiOptions<T = any> {
     threshold?: number;
     limit?: number;
     includeScore?: boolean;
     includeMatches?: boolean;
-    useKanaNormalization?: boolean; // Still needed for query normalization
-    normalizationOptions?: NormalizationOptions; // Still needed for query normalization
-    useRomajiSearch?: boolean; // Still needed for query processing
+    useKanaNormalization?: boolean;
+    normalizationOptions?: NormalizationOptions;
+    useRomajiSearch?: boolean;
     tokenizer?: Tokenizer<IpadicFeatures>; // Keep if query reading is needed at search time
 }
 
-export default class Aimai<T = any> { // Use any for T if original type isn't strictly needed after indexing
+export default class Aimai<T = any> {
     private indexedList: IndexedItem<T>[];
     // Adjust opts type to reflect removed keys
     private opts: Required<Omit<AimaiOptions<T>, 'tokenizer' | 'normalizationOptions' | 'includeMatches'>> & {
@@ -41,9 +41,9 @@ export default class Aimai<T = any> { // Use any for T if original type isn't st
             threshold: 0.6,
             limit: Infinity,
             includeScore: true,
-            includeMatches: false, // Default for includeMatches
-            useKanaNormalization: true, // For query
-            useRomajiSearch: true,      // For query
+            includeMatches: false,
+            useKanaNormalization: true,
+            useRomajiSearch: true,
             normalizationOptions: {
                 normalizeLongVowel: true,
                 expandIterationMark: true,
@@ -60,7 +60,7 @@ export default class Aimai<T = any> { // Use any for T if original type isn't st
             includeMatches: mergedOptions.includeMatches,
             useKanaNormalization: mergedOptions.useKanaNormalization,
             useRomajiSearch: mergedOptions.useRomajiSearch,
-            tokenizer: options?.tokenizer, // Store tokenizer if provided
+            tokenizer: options?.tokenizer,
             normalizationOptions: {
                 ...defaultOptions.normalizationOptions,
                 ...(options?.normalizationOptions || {}), // Merge normalization options safely

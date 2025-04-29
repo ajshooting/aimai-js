@@ -1,11 +1,11 @@
 import { distance } from 'fastest-levenshtein';
 
-// Levenshtein distance wrapper
+// Levenshtein distance
 export function levenshteinDistance(a: string, b: string): number {
     return distance(a, b);
 }
 
-// Similarity score between 0 and 1
+// Similarity score
 export function similarity(a: string, b: string): number {
     const d = distance(a, b);
     const maxLen = Math.max(a.length, b.length);

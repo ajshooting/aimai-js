@@ -1,7 +1,6 @@
-import * as unorm from 'unorm';
+import unorm from 'unorm';
 import { NormalizationOptions } from '../types';
 
-// デフォルトの正規化オプション
 const defaultNormalizationOptions: Required<NormalizationOptions> = {
     normalizeLongVowel: true,
     expandIterationMark: true,
@@ -13,8 +12,10 @@ export function normalize(text: string, options?: NormalizationOptions): string 
 
     // 1. Unicode NFKC normalization (主に全角英数記号->半角、半角カナ->全角カナ)
     let s = unorm.nfkc(text);
+
     // 2. Lowercase for ASCII letters
     s = s.toLowerCase();
+
     // 3. Convert Katakana to Hiragana (半角カナはNFKCで全角になっているはず)
     s = s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
 
