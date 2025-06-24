@@ -75,7 +75,7 @@ describe('Aimai Integration Tests (with Pre-indexed Data)', () => {
     it('should prioritize exact original match in sorting', async () => {
         const data: IndexedItem<string>[] = [
             { original: 'テストデータ', normalized: 'てすとでーた', reading: 'てすとでーた' },
-            { original: 'テスト', normalized: 'てすと', reading: 'てすと' }, // Higher score for 'テスト' query
+            { original: 'テスト', normalized: 'てすと', reading: 'てすと' }, 
             { original: 'データ', normalized: 'でーた', reading: 'でーた' },
         ]; // Fixed missing closing bracket
         const aimai = new Aimai(data);
