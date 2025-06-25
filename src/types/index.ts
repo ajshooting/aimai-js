@@ -14,7 +14,7 @@ export interface AimaiOptions<T = any> {
     useKanaNormalization?: boolean; // F2.1 (ひらがな正規化全体)
     normalizationOptions?: NormalizationOptions; // F2.1 (詳細な正規化オプション)
     useRomajiSearch?: boolean; // F3.2
-    keys?: (keyof T | { name: keyof T; weight: number })[]; // F1.2, F4.1 (重み付け)
+    keys?: (keyof T)[] | string[]; // For object arrays: which keys to search
     tokenizer?: any; // F4.2 (カスタム Kuromoji.js インスタンス)
 }
 

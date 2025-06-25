@@ -5,7 +5,6 @@ import { getReading } from './japanese/tokenizer';
 import { romajiToHiragana } from './utils';
 import { Tokenizer, IpadicFeatures } from 'kuromoji';
 
-// --- Adjust AimaiOptions ---
 export interface AimaiOptions<T = any> {
     threshold?: number;
     limit?: number;
@@ -14,45 +13,52 @@ export interface AimaiOptions<T = any> {
     useKanaNormalization?: boolean;
     normalizationOptions?: NormalizationOptions;
     useRomajiSearch?: boolean;
-    tokenizer?: Tokenizer<IpadicFeatures>; // Keep if query reading is needed at search time
+    keys?: (keyof T)[] | string[]; // For object arrays: which keys to search
+    tokenizer?: Tokenizer<IpadicFeatures>;
 }
 
 export default class Aimai<T = any> {
     private indexedList: IndexedItem<T>[];
-    // Adjust opts type to reflect removed keys
-    private opts: Required<Omit<AimaiOptions<T>, 'tokenizer' | 'normalizationOptions' | 'includeMatches'>> & {
+    private opts: Required<Omit<AimaiOptions<T>, 'tokenizer' | 'normalizationOptions' | 'includeMatches' | 'keys'>> & {
         normalizationOptions: Required<NormalizationOptions>;
-        tokenizer?: Tokenizer<IpadicFeatures>; // Keep tokenizer instance if needed for query reading
-        includeMatches: boolean; // Keep includeMatches separate as it's not Required
+        tokenizer?: Tokenizer<IpadicFeatures>;
+        includeMatches: boolean;
+        keys: string[];
     };
 
-    // Constructor now accepts pre-indexed data
-    constructor(indexedList: IndexedItem<T>[], options?: AimaiOptions<T>) {
-        if (!Array.isArray(indexedList) || (indexedList.length > 0 && (!indexedList[0].hasOwnProperty('original') || !indexedList[0].hasOwnProperty('normalized') || !indexedList[0].hasOwnProperty('reading')))) {
-            console.warn('Aimai constructor received potentially invalid indexed data. Expected IndexedItem<T>[]. Initializing with empty list.');
-            this.indexedList = []; // Initialize as empty to avoid errors
-        } else {
-            this.indexedList = indexedList;
-        }
+    /**
+     * Create Aimai instance with pre-indexed data (recommended for performance)
+     * @param indexedData Pre-processed indexed data
+     * @param options Search options
+     */
+    constructor(indexedData: IndexedItem<T>[], options?: AimaiOptions<T>);
 
-        // --- Process Options (Simplified, removed keys) ---
-        // Adjust defaultOptions type
-        const defaultOptions: Required<Omit<AimaiOptions<any>, 'tokenizer' | 'normalizationOptions' | 'includeMatches'>> & { normalizationOptions: Required<NormalizationOptions>; includeMatches: boolean } = {
+    /**
+     * Create Aimai instance with raw data (will show performance warning for large datasets)
+     * @param rawData Raw data array
+     * @param options Search options
+     * @deprecated Use Aimai.create() for better performance with raw data
+     */
+    constructor(rawData: T[], options?: AimaiOptions<T>);
+
+    constructor(data: T[] | IndexedItem<T>[], options?: AimaiOptions<T>) {
+        // Set default options
+        const defaultOptions = {
             threshold: 0.6,
             limit: Infinity,
             includeScore: true,
             includeMatches: false,
             useKanaNormalization: true,
             useRomajiSearch: true,
+            keys: [],
             normalizationOptions: {
                 normalizeLongVowel: true,
                 expandIterationMark: true,
             },
         };
 
-        const mergedOptions = { ...defaultOptions, ...options }; // Merge provided options
+        const mergedOptions = { ...defaultOptions, ...options };
 
-        // Assign to this.opts, ensuring type compatibility
         this.opts = {
             threshold: mergedOptions.threshold,
             limit: mergedOptions.limit,
@@ -60,88 +66,240 @@ export default class Aimai<T = any> {
             includeMatches: mergedOptions.includeMatches,
             useKanaNormalization: mergedOptions.useKanaNormalization,
             useRomajiSearch: mergedOptions.useRomajiSearch,
+            keys: Array.isArray(mergedOptions.keys) ? mergedOptions.keys as string[] : [],
             tokenizer: options?.tokenizer,
             normalizationOptions: {
                 ...defaultOptions.normalizationOptions,
-                ...(options?.normalizationOptions || {}), // Merge normalization options safely
+                ...(options?.normalizationOptions || {}),
             },
         };
+
+        // Check if data is already indexed
+        if (this.isIndexedData(data)) {
+            this.indexedList = data;
+        } else {
+            // Show deprecation warning for raw data usage
+            const rawData = data as T[];
+            if (rawData.length > 50) {
+                console.warn('⚠️  Aimai: Large dataset detected. Using raw data with constructor is deprecated.');
+                console.warn('   Recommended: Use Aimai.create() or Aimai.createIndex() for better performance.');
+                console.warn(`   Current dataset size: ${rawData.length} items`);
+            }
+
+            // For backward compatibility, still support raw data but discourage it
+            this.indexedList = [];
+            this.rawData = rawData;
+        }
     }
 
-    // Helper to normalize the *query* text based on options
-    private normalizeQuery(text: string): string {
-        let s = text;
-        if (this.opts.useRomajiSearch) {
-            s = romajiToHiragana(s);
+    private rawData?: T[];
+
+    /**
+     * Create Aimai instance with automatic indexing (recommended for raw data)
+     * @param data Raw data array
+     * @param options Search options
+     * @returns Promise<Aimai<T>>
+     */
+    static async create<T>(data: T[], options?: AimaiOptions<T>): Promise<Aimai<T>> {
+        console.log(`🔄 Indexing ${data.length} items for optimal search performance...`);
+        const startTime = Date.now();
+
+        const indexedData = await Aimai.createIndex(data, options);
+        const instance = new Aimai(indexedData, options);
+
+        const indexTime = Date.now() - startTime;
+        console.log(`✅ Indexing completed in ${indexTime}ms. Ready for fast searches!`);
+
+        return instance;
+    }
+
+    /**
+     * Create indexed data without instantiating Aimai (useful for pre-processing)
+     * @param data Raw data array
+     * @param options Processing options
+     * @returns Promise<IndexedItem<T>[]>
+     */
+    static async createIndex<T>(data: T[], options?: AimaiOptions<T>): Promise<IndexedItem<T>[]> {
+        const tempInstance = new Aimai<T>([], options);
+        return await tempInstance.processRawData(data);
+    }
+
+    /**
+     * Load pre-saved indexed data from file
+     * @param filePath Path to saved indexed data JSON file
+     * @param options Search options
+     * @returns Promise<Aimai<T>>
+     */
+    static async loadFromFile<T>(filePath: string, options?: AimaiOptions<T>): Promise<Aimai<T>> {
+        const fs = await import('fs/promises');
+        const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+        return new Aimai<T>(data, options);
+    }
+
+    /**
+     * Save indexed data to file for future use
+     * @param filePath Path to save indexed data
+     */
+    async saveToFile(filePath: string): Promise<void> {
+        const fs = await import('fs/promises');
+        await fs.writeFile(filePath, JSON.stringify(this.indexedList, null, 2));
+        console.log(`💾 Indexed data saved to ${filePath}`);
+    }
+
+    private isIndexedData(data: T[] | IndexedItem<T>[]): data is IndexedItem<T>[] {
+        return data.length > 0 &&
+            typeof (data[0] as any).original !== 'undefined' &&
+            typeof (data[0] as any).normalized === 'string' &&
+            typeof (data[0] as any).reading === 'string';
+    }
+
+    private async ensureIndexed(): Promise<void> {
+        if (this.indexedList.length > 0) return;
+
+        if (this.rawData) {
+            console.log('⚠️  Performing on-demand indexing. This may be slow for large datasets.');
+            this.indexedList = await this.processRawData(this.rawData);
+            this.rawData = undefined; // Clear raw data after indexing
         }
+    }
+
+    private async processRawData(data: T[]): Promise<IndexedItem<T>[]> {
+        const indexedList: IndexedItem<T>[] = [];
+
+        for (const item of data) {
+            const text = this.extractText(item);
+            const normalizedText = this.normalizeText(text);
+            const reading = await getReading(text, this.opts.tokenizer);
+            const normalizedReading = normalize(reading, this.opts.normalizationOptions);
+
+            indexedList.push({
+                original: item,
+                normalized: normalizedText,
+                reading: normalizedReading,
+            });
+        }
+
+        return indexedList;
+    }
+
+    private extractText(item: T): string {
+        if (typeof item === 'string') {
+            return item;
+        }
+
+        if (typeof item === 'object' && item !== null) {
+            // If keys are specified, search those keys
+            if (this.opts.keys.length > 0) {
+                const texts: string[] = [];
+                for (const key of this.opts.keys) {
+                    const value = (item as any)[key];
+                    if (typeof value === 'string') {
+                        texts.push(value);
+                    }
+                }
+                return texts.join(' ');
+            }
+
+            // If no keys specified, join all string values
+            const stringValues = Object.values(item).filter(v => typeof v === 'string');
+            return stringValues.join(' ');
+        }
+
+        return String(item);
+    }
+
+    private normalizeText(text: string): string {
+        let s = text;
+
+        // Apply kana normalization first
         if (this.opts.useKanaNormalization) {
             s = normalize(s, this.opts.normalizationOptions);
         } else {
             s = s.toLowerCase();
         }
+
         return s;
     }
 
-    // Search method now uses pre-indexed data
+    private normalizeQuery(query: string): string {
+        let s = query;
+
+        // For queries, apply romaji conversion first
+        if (this.opts.useRomajiSearch) {
+            s = romajiToHiragana(s);
+        }
+
+        // Then apply kana normalization
+        if (this.opts.useKanaNormalization) {
+            s = normalize(s, this.opts.normalizationOptions);
+        } else {
+            s = s.toLowerCase();
+        }
+
+        return s;
+    }
+
     async search(query: string): Promise<SearchResult<T>[]> {
+        // Validate query
+        if (!query || query.trim().length === 0) {
+            return [];
+        }
+
+        // Ensure data is indexed
+        await this.ensureIndexed();
+
+        if (this.indexedList.length === 0) {
+            console.warn('No data to search. Please provide data to the constructor.');
+            return [];
+        }
+
         const normalizedQuery = this.normalizeQuery(query);
-        // Get query reading only if needed (e.g., if comparing against precomputed readings)
-        // This still requires the tokenizer at search time if used.
-        const readingQuery = await getReading(query, this.opts.tokenizer);
-        const normalizedReadingQuery = normalize(readingQuery, this.opts.normalizationOptions); // Normalize query reading
+
+        // For romaji queries, also get the reading of the converted query
+        let queryForReading = query;
+        if (this.opts.useRomajiSearch) {
+            queryForReading = romajiToHiragana(query);
+        }
+
+        const readingQuery = await getReading(queryForReading, this.opts.tokenizer);
+        const normalizedReadingQuery = normalize(readingQuery, this.opts.normalizationOptions);
 
         const results: SearchResult<T>[] = [];
 
         for (let i = 0; i < this.indexedList.length; i++) {
             const targetData = this.indexedList[i];
 
-            // Calculate similarity scores using pre-calculated data
-            // Compare normalized query with normalized text (Levenshtein based)
+            // Calculate similarity scores
             const scoreTextLevenshtein = similarity(normalizedQuery, targetData.normalized);
-            // Compare normalized query reading with pre-calculated normalized reading (Levenshtein based)
             const scoreReadingLevenshtein = similarity(normalizedReadingQuery, targetData.reading);
 
             // Check for substring inclusion
             const includesText = targetData.normalized.includes(normalizedQuery);
             const includesReading = targetData.reading.includes(normalizedReadingQuery);
 
-            // Assign higher score if substring is found (adjust score as needed)
-            // Use a score slightly below 1 for substring match to differentiate from perfect Levenshtein match
+            // Assign higher score if substring is found
             const substringScore = 0.85;
             const scoreText = includesText ? Math.max(scoreTextLevenshtein, substringScore) : scoreTextLevenshtein;
             const scoreReading = includesReading ? Math.max(scoreReadingLevenshtein, substringScore) : scoreReadingLevenshtein;
 
-            // Combine scores (simple max for now)
+            // Combine scores
             const score = Math.max(scoreText, scoreReading);
 
             if (score >= this.opts.threshold) {
                 const result: SearchResult<T> = {
-                    item: targetData.original, // Return the original item
-                    refIndex: i, // Keep original index relative to the input indexedList
+                    item: targetData.original,
+                    refIndex: i,
                     score: this.opts.includeScore ? score : 0,
                 };
-                // Add matches if requested (placeholder)
-                // if (this.opts.includeMatches) {
-                //     result.matches = calculateMatches(normalizedQuery, targetData.normalized, normalizedReadingQuery, targetData.reading);
-                // }
                 results.push(result);
             }
         }
 
-        // Sort results:
-        // 1. Prioritize items whose *original* representation exactly matches the *original* query.
-        // 2. Then sort by descending score.
-        // 3. Finally, sort by original index for stability.
+        // Sort results
         results.sort((a, b) => {
-            // Need a way to compare original item to original query.
-            // This requires the original item structure to be predictable or stringifiable.
-            // Using String() for a basic comparison. Adjust if needed.
-            // Handle potential objects in original item
             const getComparableString = (item: T): string => {
                 if (typeof item === 'string') return item;
-                // Attempt a stable string representation for objects, might need refinement
                 try {
-                    // Sort keys for consistent stringification
                     const sortedItem = Object.keys(item as object).sort().reduce((obj, key) => {
                         (obj as any)[key] = (item as any)[key];
                         return obj;
@@ -151,6 +309,7 @@ export default class Aimai<T = any> {
                     return String(item);
                 }
             };
+
             const aOriginalString = getComparableString(a.item);
             const bOriginalString = getComparableString(b.item);
 
@@ -160,7 +319,6 @@ export default class Aimai<T = any> {
             if (aIsOriginalExact && !bIsOriginalExact) return -1;
             if (!aIsOriginalExact && bIsOriginalExact) return 1;
 
-            // If scores are equal, prioritize substring matches over pure Levenshtein matches
             if (b.score === a.score) {
                 const aTargetData = this.indexedList[a.refIndex];
                 const bTargetData = this.indexedList[b.refIndex];

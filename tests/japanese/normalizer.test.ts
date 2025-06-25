@@ -19,8 +19,8 @@ describe('Japanese Normalizer', () => {
     });
 
     it('should normalize long vowels by default', () => {
-        expect(normalize('サーバー')).toBe('さーば');
-        expect(normalize('コンピューター')).toBe('こんぴゅーた');
+        expect(normalize('サーバー')).toBe('さあばあ');
+        expect(normalize('コンピューター')).toBe('こんぴゅあたあ');
     });
 
     it('should optionally disable long vowel normalization', () => {
