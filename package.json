@@ -1,9 +1,41 @@
 {
-  "name": "aimai-js",
+  "name": "aimaijs",
+  "version": "1.0.0",
+  "description": "日本語対応のシンプルな曖昧検索ライブラリ",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "keywords": [
+    "japanese",
+    "fuzzy-search",
+    "search",
+    "日本語",
+    "曖昧検索",
+    "kana",
+    "romaji",
+    "hiragana",
+    "katakana"
+  ],
+  "author": "ajshooting",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ajshooting/aimai-js.git"
+  },
+  "homepage": "https://github.com/ajshooting/aimai-js#readme",
+  "bugs": {
+    "url": "https://github.com/ajshooting/aimai-js/issues"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "generate:index": "ts-node src/utils/generateIndex.ts"
   },
   "packageManager": "yarn@4.6.0",

@@ -1,0 +1,32 @@
+# ソースファイル
+src/
+tests/
+*.test.ts
+*.test.js
+
+# 設定ファイル
+tsconfig.json
+jest.config.js
+jest.setup.js
+.gitignore
+
+# 開発用ファイル
+node_modules/
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ビルドツール
+*.tsbuildinfo
+
+# ドキュメント（READMEは残す）
+docs/
+
+# その他
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
