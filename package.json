@@ -22,7 +22,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ajshooting/aimai-js.git"
+    "url": "git+https://github.com/ajshooting/aimai-js.git"
   },
   "homepage": "https://github.com/ajshooting/aimai-js#readme",
   "bugs": {
